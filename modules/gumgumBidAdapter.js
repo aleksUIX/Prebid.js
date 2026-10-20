@@ -484,7 +484,7 @@ function buildRequests(validBidRequests, bidderRequest) {
     const userEids = getUserEids(bidRequest, bidderRequest);
     const eids = getEidsFromEidsArray(userEids);
     const gpid = deepAccess(ortb2Imp, 'ext.gpid');
-    let sizes = [1, 1];
+    let sizes = [[1, 1]];
     let data = {};
     data.displaymanager = 'Prebid.js - gumgum';
     data.displaymanagerver = '$prebid.version$';
@@ -527,10 +527,19 @@ function buildRequests(validBidRequests, bidderRequest) {
     // ADTS-134 Retrieve ID envelopes
     for (const eid in eids) data[eid] = eids[eid];
 
-    if (mediaTypes.native) {
-      sizes = [1, 1];
-    } else if (mediaTypes.banner) {
-      sizes = mediaTypes.banner.sizes;
+    // A flat [1, 1] is not a [width, height] pair. getGreatestDimensions throws,
+    // and that throw drops every GumGum request in the auction. Keep banner
+    // sizes for an in-slot unit that also declares native. Native-only
+    // requests use a nested 1x1 pair.
+    const bannerSizes = mediaTypes.banner && mediaTypes.banner.sizes;
+    // Match the product selection below. zone/pubId wins over legacy inSlot,
+    // and native wins over slot only when slot itself is absent.
+    const usesZone = params.zone || params.pubId;
+    const sentAsInSlot = usesZone ? params.slot : params.inSlot;
+    if (mediaTypes.native && !(sentAsInSlot && bannerSizes)) {
+      sizes = [[1, 1]];
+    } else if (bannerSizes) {
+      sizes = bannerSizes;
     } else if (mediaTypes.video) {
       sizes = mediaTypes.video.playerSize;
       data = _getVidParams(mediaTypes.video);

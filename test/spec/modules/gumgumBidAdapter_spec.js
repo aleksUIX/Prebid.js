@@ -814,7 +814,7 @@ describe('gumgumAdapter', function () {
         const bidRequest = spec.buildRequests([request])[0];
         expect(bidRequest.data.pi).to.equal(5);
         expect(bidRequest.data.nat).to.equal(JSON.stringify(nativeOrtb));
-        expect(bidRequest.sizes).to.deep.equal([1, 1]);
+        expect(bidRequest.sizes).to.deep.equal([[1, 1]]);
       });
       it('should send ni param alongside nat when both mediaTypes.native and params.native are present', function () {
         const nativeOrtb = {
@@ -829,6 +829,99 @@ describe('gumgumAdapter', function () {
         expect(bidRequest.data.pi).to.equal(5);
         expect(bidRequest.data.nat).to.equal(JSON.stringify(nativeOrtb));
         expect(bidRequest.data.ni).to.equal(42);
+      });
+      it('keeps banner sizes when an in-slot unit also declares native', function () {
+        const request = {
+          ...bidRequests[0],
+          params: { inSlot: 9 },
+          mediaTypes: {
+            banner: { sizes: [[300, 250], [300, 600]] },
+            native: { title: { required: true } }
+          }
+        };
+        const bidRequest = spec.buildRequests([request])[0];
+        expect(bidRequest.data.pi).to.equal(3);
+        expect(bidRequest.data.si).to.equal(9);
+        expect(bidRequest.data.maxw).to.equal(300);
+        expect(bidRequest.data.maxh).to.equal(600);
+        expect(bidRequest.data.bf).to.equal('300x250,300x600');
+        expect(bidRequest.sizes).to.deep.equal([[300, 250], [300, 600]]);
+        const interpreted = spec.interpretResponse({
+          body: {
+            ad: { id: 1, price: 1, markup: '<div></div>', width: 300, height: 250 },
+            pag: { pvid: 'pv' }
+          }
+        }, bidRequest);
+        expect(interpreted).to.have.length(1);
+        expect(interpreted[0].width).to.equal('300');
+        expect(interpreted[0].height).to.equal('250');
+      });
+      it('keeps native 1x1 when zone selects native even if inSlot is also set', function () {
+        const request = {
+          ...bidRequests[0],
+          params: { ...zoneParam, inSlot: 9 },
+          mediaTypes: {
+            banner: { sizes: [[300, 250], [300, 600]] },
+            native: {}
+          }
+        };
+        const bidRequest = spec.buildRequests([request])[0];
+        expect(bidRequest.data.pi).to.equal(5);
+        expect(bidRequest.sizes).to.deep.equal([[1, 1]]);
+      });
+      it('keeps banner sizes when slot is combined with native', function () {
+        const request = {
+          ...bidRequests[0],
+          params: { ...zoneParam, slot: '123' },
+          mediaTypes: {
+            banner: { sizes: [[300, 250], [300, 600]] },
+            native: {}
+          }
+        };
+        const bidRequest = spec.buildRequests([request])[0];
+        expect(bidRequest.data.pi).to.equal(3);
+        expect(bidRequest.data.si).to.equal('123');
+        expect(bidRequest.data.bf).to.equal('300x250,300x600');
+      });
+      it('builds the banner-only unit when another unit is banner plus native', function () {
+        const mixed = {
+          ...bidRequests[0],
+          mediaTypes: {
+            banner: { sizes: [[300, 250]] },
+            native: {}
+          }
+        };
+        const bannerOnly = {
+          ...bidRequests[0],
+          bidId: 'banner-only',
+          params: { inSlot: 8 },
+          mediaTypes: { banner: { sizes: [[728, 90]] } }
+        };
+        const requests = spec.buildRequests([mixed, bannerOnly]);
+        expect(requests).to.have.length(2);
+        expect(requests[0].data.bf).to.equal('300x250');
+        expect(requests[1].data.bf).to.equal('728x90');
+      });
+      it('interprets an in-screen response on a unit that also declares native', function () {
+        const request = {
+          ...bidRequests[0],
+          params: { inScreen: 10 },
+          mediaTypes: {
+            banner: { sizes: [[300, 250]] },
+            native: {}
+          }
+        };
+        const bidRequest = spec.buildRequests([request])[0];
+        expect(bidRequest.data.pi).to.equal(2);
+        const interpreted = spec.interpretResponse({
+          body: {
+            ad: { id: 1, price: 1, markup: '<div></div>', width: 1, height: 1 },
+            pag: { pvid: 'pv' }
+          }
+        }, bidRequest);
+        expect(interpreted).to.have.length(1);
+        expect(interpreted[0].width).to.equal('1');
+        expect(interpreted[0].height).to.equal('1');
       });
       it('should set pi=5 for mediaTypes.native without ortb property', function () {
         const request = {
